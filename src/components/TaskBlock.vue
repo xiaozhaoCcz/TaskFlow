@@ -7,6 +7,14 @@
     }]"
     :style="{ '--level': level }"
   >
+    <!-- 上方插入指示器 -->
+    <div 
+      :class="['drop-indicator', 'drop-indicator-top', { 'active': dropPosition === 'top' }]"
+      @dragover.prevent="handleDragOverTop"
+      @dragleave="handleDragLeave"
+      @drop="handleDropTop"
+    ></div>
+
     <!-- 主任务块 -->
     <div 
       :class="['task-header', { 'expanded': expanded, 'dragging': isDragging }]"
@@ -237,6 +245,7 @@
           <DropZone 
             :children="task.elseChildren || []"
             :parentTask="task"
+            :parentTaskId="task.id"
             branch="elseChildren"
             :level="level + 1"
             @update-children="updateChildren"
@@ -251,6 +260,7 @@
           <DropZone 
             :children="task.children || []"
             :parentTask="task"
+            :parentTaskId="task.id"
             branch="children"
             :level="level + 1"
             @update-children="updateChildren"
@@ -265,6 +275,7 @@
           <DropZone 
             :children="task.children || []"
             :parentTask="task"
+            :parentTaskId="task.id"
             branch="children"
             :level="level + 1"
             @update-children="updateChildren"
@@ -279,6 +290,7 @@
           <DropZone 
             :children="task.catchChildren || []"
             :parentTask="task"
+            :parentTaskId="task.id"
             branch="catchChildren"
             :level="level + 1"
             @update-children="updateChildren"
@@ -286,11 +298,19 @@
         </div>
       </div>
     </div>
+
+    <!-- 下方插入指示器 -->
+    <div 
+      :class="['drop-indicator', 'drop-indicator-bottom', { 'active': dropPosition === 'bottom' }]"
+      @dragover.prevent="handleDragOverBottom"
+      @dragleave="handleDragLeave"
+      @drop="handleDropBottom"
+    ></div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, inject } from 'vue'
 import DropZone from './DropZone.vue'
 
 const props = defineProps({
@@ -313,6 +333,14 @@ const props = defineProps({
   isCurrentTask: {
     type: Boolean,
     default: false
+  },
+  parentTaskId: {
+    type: String,
+    default: null
+  },
+  branch: {
+    type: String,
+    default: null
   }
 })
 
@@ -320,6 +348,10 @@ const emit = defineEmits(['delete', 'move-up', 'move-down', 'update', 'drag-star
 
 const expanded = ref(props.task.isContainer || false)
 const isDragging = ref(false)
+const dropPosition = ref(null) // 'top' 或 'bottom'
+
+const draggingTaskId = inject('draggingTaskId', null)
+const moveTask = inject('moveTask', null)
 
 function toggleExpand() {
   if (props.task.isContainer) {
@@ -377,6 +409,82 @@ function handleDragStart(event) {
 function handleDragEnd(event) {
   isDragging.value = false
   emit('drag-end')
+}
+
+function handleDragOverTop(event) {
+  event.stopPropagation()
+  
+  // 检查是否是画布任务拖拽
+  if (!draggingTaskId?.value) return
+  
+  // 不能拖拽到自己上方
+  if (draggingTaskId.value === props.task.id) return
+  
+  dropPosition.value = 'top'
+  event.dataTransfer.dropEffect = 'move'
+}
+
+function handleDragOverBottom(event) {
+  event.stopPropagation()
+  
+  // 检查是否是画布任务拖拽
+  if (!draggingTaskId?.value) return
+  
+  // 不能拖拽到自己下方
+  if (draggingTaskId.value === props.task.id) return
+  
+  dropPosition.value = 'bottom'
+  event.dataTransfer.dropEffect = 'move'
+}
+
+function handleDragLeave(event) {
+  dropPosition.value = null
+}
+
+function handleDropTop(event) {
+  event.preventDefault()
+  event.stopPropagation()
+  dropPosition.value = null
+  
+  try {
+    const dragData = JSON.parse(event.dataTransfer.getData('application/json'))
+    
+    if (dragData.isCanvasTask && moveTask) {
+      // 移动到当前任务上方（相同位置）
+      if (props.level > 0 && props.parentTaskId && props.branch) {
+        // 嵌套任务：移动到容器内指定位置
+        moveTask(dragData.taskId, props.parentTaskId, props.branch, props.index)
+      } else {
+        // 顶层任务：移动到顶层指定位置
+        moveTask(dragData.taskId, null, null, props.index)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to drop task:', error)
+  }
+}
+
+function handleDropBottom(event) {
+  event.preventDefault()
+  event.stopPropagation()
+  dropPosition.value = null
+  
+  try {
+    const dragData = JSON.parse(event.dataTransfer.getData('application/json'))
+    
+    if (dragData.isCanvasTask && moveTask) {
+      // 移动到当前任务下方（index + 1）
+      if (props.level > 0 && props.parentTaskId && props.branch) {
+        // 嵌套任务：移动到容器内指定位置
+        moveTask(dragData.taskId, props.parentTaskId, props.branch, props.index + 1)
+      } else {
+        // 顶层任务：移动到顶层指定位置
+        moveTask(dragData.taskId, null, null, props.index + 1)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to drop task:', error)
+  }
 }
 </script>
 
@@ -600,5 +708,48 @@ function handleDragEnd(event) {
   font-size: 12px;
   font-weight: 600;
   color: #606266;
+}
+
+.drop-indicator {
+  height: 8px;
+  margin: -4px 0;
+  position: relative;
+  z-index: 10;
+  transition: all 0.2s;
+  opacity: 0;
+  pointer-events: all;
+}
+
+.drop-indicator::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: #409eff;
+  transform: translateY(-50%) scaleY(0);
+  transition: all 0.2s;
+}
+
+.drop-indicator.active {
+  opacity: 1;
+}
+
+.drop-indicator.active::before {
+  transform: translateY(-50%) scaleY(1);
+}
+
+.drop-indicator-top {
+  margin-top: 0;
+}
+
+.drop-indicator-bottom {
+  margin-bottom: 0;
+}
+
+.task-block .drop-indicator {
+  margin-left: 0;
+  margin-right: 0;
 }
 </style>
