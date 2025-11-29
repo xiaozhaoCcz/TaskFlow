@@ -30,6 +30,7 @@
           @update="updateTask"
           @drag-start="handleTaskDragStart"
           @drag-end="handleTaskDragEnd"
+          @insert-task="insertTask"
         />
       </div>
     </div>
@@ -243,6 +244,42 @@ function handleTaskDragStart(taskId) {
 function handleTaskDragEnd() {
   if (draggingTaskId) {
     draggingTaskId.value = null
+  }
+}
+
+function insertTask(newTask, insertIndex, parentTaskId, branch) {
+  if (!parentTaskId) {
+    // 顶层任务插入
+    const newTasks = [...props.tasks]
+    newTasks.splice(insertIndex, 0, newTask)
+    emit('update-tasks', newTasks)
+  } else {
+    // 嵌套任务插入 - 需要递归查找父任务
+    function insertIntoParent(tasks) {
+      return tasks.map(task => {
+        if (task.id === parentTaskId) {
+          const updated = { ...task }
+          const targetArray = [...(updated[branch] || [])]
+          targetArray.splice(insertIndex, 0, newTask)
+          updated[branch] = targetArray
+          return updated
+        }
+        const updated = { ...task }
+        if (updated.children) {
+          updated.children = insertIntoParent(updated.children)
+        }
+        if (updated.elseChildren) {
+          updated.elseChildren = insertIntoParent(updated.elseChildren)
+        }
+        if (updated.catchChildren) {
+          updated.catchChildren = insertIntoParent(updated.catchChildren)
+        }
+        return updated
+      })
+    }
+
+    const newTasks = insertIntoParent([...props.tasks])
+    emit('update-tasks', newTasks)
   }
 }
 </script>

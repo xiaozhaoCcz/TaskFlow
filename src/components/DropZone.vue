@@ -26,6 +26,7 @@
       @update="updateTask"
       @drag-start="handleTaskDragStart"
       @drag-end="handleTaskDragEnd"
+      @insert-task="insertTask"
     />
   </div>
 </template>
@@ -186,6 +187,12 @@ function handleTaskDragEnd() {
   if (draggingTaskId) {
     draggingTaskId.value = null
   }
+}
+
+function insertTask(newTask, insertIndex) {
+  const newChildren = [...props.children]
+  newChildren.splice(insertIndex, 0, newTask)
+  emit('update-children', props.branch, newChildren)
 }
 </script>
 
