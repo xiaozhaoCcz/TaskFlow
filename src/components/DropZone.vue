@@ -18,6 +18,8 @@
       :level="level"
       :executing="executing"
       :isCurrentTask="currentTaskId === child.id"
+      :parentTaskId="parentTask.id"
+      :branch="branch"
       @delete="deleteTask"
       @move-up="moveTaskUp"
       @move-down="moveTaskDown"

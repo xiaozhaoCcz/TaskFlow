@@ -99,15 +99,49 @@ function removeTask(taskId) {
 
 // 移动任务到新位置
 function moveTask(draggedTaskId, targetParentId, targetBranch, targetIndex) {
+  // 先找到被拖拽任务的原始位置信息
+  let originalIndex = -1
+  let originalParentId = null
+  let originalBranch = null
+  
+  function findOriginalPosition(taskList, parentId = null, branch = null) {
+    for (let i = 0; i < taskList.length; i++) {
+      if (taskList[i].id === draggedTaskId) {
+        originalIndex = i
+        originalParentId = parentId
+        originalBranch = branch
+        return true
+      }
+      
+      // 在子任务中查找
+      if (taskList[i].children && findOriginalPosition(taskList[i].children, taskList[i].id, 'children')) return true
+      if (taskList[i].elseChildren && findOriginalPosition(taskList[i].elseChildren, taskList[i].id, 'elseChildren')) return true
+      if (taskList[i].catchChildren && findOriginalPosition(taskList[i].catchChildren, taskList[i].id, 'catchChildren')) return true
+    }
+    return false
+  }
+  
+  findOriginalPosition(tasks.value)
+  
   // 先移除任务
   const movedTask = removeTask(draggedTaskId)
   if (!movedTask) return
   
+  // 计算调整后的插入位置
+  // 如果在同一父级和同一分支中移动，且目标位置在原位置之后，需要减1
+  let adjustedIndex = targetIndex
+  if (targetParentId === originalParentId && 
+      targetBranch === originalBranch && 
+      targetIndex !== undefined && 
+      targetIndex > originalIndex) {
+    adjustedIndex = targetIndex - 1
+  }
+  
   // 添加到新位置
   if (!targetParentId) {
     // 移动到顶层
-    if (targetIndex !== undefined) {
-      tasks.value.splice(targetIndex, 0, movedTask)
+    if (adjustedIndex !== undefined && adjustedIndex >= 0) {
+      tasks.value.splice(adjustedIndex, 0, movedTask)
     } else {
       tasks.value.push(movedTask)
     }
@@ -117,8 +151,8 @@ function moveTask(draggedTaskId, targetParentId, targetBranch, targetIndex) {
       for (let task of taskList) {
         if (task.id === targetParentId) {
           const targetArray = task[targetBranch] || []
-          if (targetIndex !== undefined) {
-            targetArray.splice(targetIndex, 0, movedTask)
+          if (adjustedIndex !== undefined && adjustedIndex >= 0) {
+            targetArray.splice(adjustedIndex, 0, movedTask)
           } else {
             targetArray.push(movedTask)
           }
