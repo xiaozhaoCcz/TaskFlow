@@ -344,7 +344,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete', 'move-up', 'move-down', 'update', 'drag-start', 'drag-end'])
+const emit = defineEmits(['delete', 'move-up', 'move-down', 'update', 'drag-start', 'drag-end', 'insert-task'])
 
 const expanded = ref(props.task.isContainer || false)
 const isDragging = ref(false)
@@ -414,31 +414,65 @@ function handleDragEnd(event) {
 function handleDragOverTop(event) {
   event.stopPropagation()
   
-  // 检查是否是画布任务拖拽
-  if (!draggingTaskId?.value) return
-  
   // 不能拖拽到自己上方
-  if (draggingTaskId.value === props.task.id) return
+  if (draggingTaskId?.value === props.task.id) return
   
   dropPosition.value = 'top'
-  event.dataTransfer.dropEffect = 'move'
+  event.dataTransfer.dropEffect = draggingTaskId?.value ? 'move' : 'copy'
 }
 
 function handleDragOverBottom(event) {
   event.stopPropagation()
   
-  // 检查是否是画布任务拖拽
-  if (!draggingTaskId?.value) return
-  
   // 不能拖拽到自己下方
-  if (draggingTaskId.value === props.task.id) return
+  if (draggingTaskId?.value === props.task.id) return
   
   dropPosition.value = 'bottom'
-  event.dataTransfer.dropEffect = 'move'
+  event.dataTransfer.dropEffect = draggingTaskId?.value ? 'move' : 'copy'
 }
 
 function handleDragLeave(event) {
   dropPosition.value = null
+}
+
+function createTask(taskData) {
+  const task = {
+    id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    type: taskData.type,
+    name: taskData.name,
+    icon: taskData.icon,
+    color: taskData.color,
+    config: getDefaultConfig(taskData.type),
+    isContainer: taskData.isContainer || false
+  }
+
+  if (taskData.isContainer) {
+    task.children = []
+    if (taskData.hasElse) {
+      task.elseChildren = []
+    }
+    if (taskData.hasCatch) {
+      task.catchChildren = []
+    }
+  }
+
+  return task
+}
+
+function getDefaultConfig(type) {
+  const configs = {
+    open_browser: { url: 'https://www.baidu.com' },
+    click_element: { selector: '', description: '' },
+    input_text: { selector: '', text: '', description: '' },
+    wait: { duration: 1000 },
+    get_text: { selector: '', variable: 'text_result' },
+    screenshot: { filename: 'screenshot.png' },
+    if: { condition: 'true', description: '' },
+    while: { condition: 'count < 10', maxIterations: 100 },
+    foreach: { items: '["item1", "item2", "item3"]', itemVar: 'item' },
+    try: { description: '尝试执行' }
+  }
+  return configs[type] || {}
 }
 
 function handleDropTop(event) {
@@ -450,7 +484,7 @@ function handleDropTop(event) {
     const dragData = JSON.parse(event.dataTransfer.getData('application/json'))
     
     if (dragData.isCanvasTask && moveTask) {
-      // 移动到当前任务上方（相同位置）
+      // 移动画布中已有的任务到当前任务上方
       if (props.level > 0 && props.parentTaskId && props.branch) {
         // 嵌套任务：移动到容器内指定位置
         moveTask(dragData.taskId, props.parentTaskId, props.branch, props.index)
@@ -458,6 +492,10 @@ function handleDropTop(event) {
         // 顶层任务：移动到顶层指定位置
         moveTask(dragData.taskId, null, null, props.index)
       }
+    } else {
+      // 从面板拖拽的新任务
+      const newTask = createTask(dragData)
+      emit('insert-task', newTask, props.index, props.parentTaskId, props.branch)
     }
   } catch (error) {
     console.error('Failed to drop task:', error)
@@ -473,7 +511,7 @@ function handleDropBottom(event) {
     const dragData = JSON.parse(event.dataTransfer.getData('application/json'))
     
     if (dragData.isCanvasTask && moveTask) {
-      // 移动到当前任务下方（index + 1）
+      // 移动画布中已有的任务到当前任务下方
       if (props.level > 0 && props.parentTaskId && props.branch) {
         // 嵌套任务：移动到容器内指定位置
         moveTask(dragData.taskId, props.parentTaskId, props.branch, props.index + 1)
@@ -481,6 +519,10 @@ function handleDropBottom(event) {
         // 顶层任务：移动到顶层指定位置
         moveTask(dragData.taskId, null, null, props.index + 1)
       }
+    } else {
+      // 从面板拖拽的新任务
+      const newTask = createTask(dragData)
+      emit('insert-task', newTask, props.index + 1, props.parentTaskId, props.branch)
     }
   } catch (error) {
     console.error('Failed to drop task:', error)
