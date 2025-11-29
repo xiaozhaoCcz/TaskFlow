@@ -22,6 +22,8 @@
       @move-up="moveTaskUp"
       @move-down="moveTaskDown"
       @update="updateTask"
+      @drag-start="handleTaskDragStart"
+      @drag-end="handleTaskDragEnd"
     />
   </div>
 </template>
@@ -57,10 +59,15 @@ const emit = defineEmits(['update-children'])
 
 const isDragOver = ref(false)
 const currentTaskId = inject('currentTaskId', null)
+const draggingTaskId = inject('draggingTaskId', null)
+const moveTask = inject('moveTask', null)
 
 function handleDragOver(event) {
   event.preventDefault()
-  event.dataTransfer.dropEffect = 'copy'
+  
+  // 根据全局状态判断是否为画布任务
+  event.dataTransfer.dropEffect = draggingTaskId?.value ? 'move' : 'copy'
+  
   isDragOver.value = true
 }
 
@@ -76,11 +83,19 @@ function handleDrop(event) {
   isDragOver.value = false
 
   try {
-    const taskData = JSON.parse(event.dataTransfer.getData('application/json'))
-    const newTask = createTask(taskData)
+    const dragData = JSON.parse(event.dataTransfer.getData('application/json'))
     
-    const newChildren = [...props.children, newTask]
-    emit('update-children', props.branch, newChildren)
+    if (dragData.isCanvasTask) {
+      // 从画布拖拽的任务 - 移动任务
+      if (moveTask) {
+        moveTask(dragData.taskId, props.parentTask.id, props.branch)
+      }
+    } else {
+      // 从面板拖拽的新任务 - 创建任务
+      const newTask = createTask(dragData)
+      const newChildren = [...props.children, newTask]
+      emit('update-children', props.branch, newChildren)
+    }
   } catch (error) {
     console.error('Failed to drop task:', error)
   }
@@ -157,6 +172,18 @@ function updateTask(taskId, updates) {
     return child
   })
   emit('update-children', props.branch, newChildren)
+}
+
+function handleTaskDragStart(taskId) {
+  if (draggingTaskId) {
+    draggingTaskId.value = taskId
+  }
+}
+
+function handleTaskDragEnd() {
+  if (draggingTaskId) {
+    draggingTaskId.value = null
+  }
 }
 </script>
 

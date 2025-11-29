@@ -55,13 +55,90 @@ const tasks = ref([])
 const executing = ref(false)
 const currentTaskId = ref(null)
 const logs = ref([])
+const draggingTaskId = ref(null)
 
 // 提供全局状态给子组件
 provide('tasks', tasks)
 provide('addLog', addLog)
+provide('draggingTaskId', draggingTaskId)
+provide('moveTask', moveTask)
+provide('removeTask', removeTask)
 
 function handleUpdateTasks(newTasks) {
   tasks.value = newTasks
+}
+
+// 递归查找并移除任务
+function removeTask(taskId) {
+  function remove(taskList) {
+    for (let i = 0; i < taskList.length; i++) {
+      if (taskList[i].id === taskId) {
+        const removed = taskList.splice(i, 1)[0]
+        return removed
+      }
+      
+      // 在子任务中查找
+      if (taskList[i].children) {
+        const found = remove(taskList[i].children)
+        if (found) return found
+      }
+      if (taskList[i].elseChildren) {
+        const found = remove(taskList[i].elseChildren)
+        if (found) return found
+      }
+      if (taskList[i].catchChildren) {
+        const found = remove(taskList[i].catchChildren)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  return remove(tasks.value)
+}
+
+// 移动任务到新位置
+function moveTask(draggedTaskId, targetParentId, targetBranch, targetIndex) {
+  // 先移除任务
+  const movedTask = removeTask(draggedTaskId)
+  if (!movedTask) return
+  
+  // 添加到新位置
+  if (!targetParentId) {
+    // 移动到顶层
+    if (targetIndex !== undefined) {
+      tasks.value.splice(targetIndex, 0, movedTask)
+    } else {
+      tasks.value.push(movedTask)
+    }
+  } else {
+    // 移动到容器内
+    function findAndInsert(taskList) {
+      for (let task of taskList) {
+        if (task.id === targetParentId) {
+          const targetArray = task[targetBranch] || []
+          if (targetIndex !== undefined) {
+            targetArray.splice(targetIndex, 0, movedTask)
+          } else {
+            targetArray.push(movedTask)
+          }
+          task[targetBranch] = targetArray
+          return true
+        }
+        
+        // 在子任务中查找
+        if (task.children && findAndInsert(task.children)) return true
+        if (task.elseChildren && findAndInsert(task.elseChildren)) return true
+        if (task.catchChildren && findAndInsert(task.catchChildren)) return true
+      }
+      return false
+    }
+    
+    findAndInsert(tasks.value)
+  }
+  
+  // 触发更新
+  tasks.value = [...tasks.value]
 }
 
 function clearWorkflow() {

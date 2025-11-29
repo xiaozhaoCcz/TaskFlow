@@ -9,7 +9,10 @@
   >
     <!-- 主任务块 -->
     <div 
-      :class="['task-header', { 'expanded': expanded }]"
+      :class="['task-header', { 'expanded': expanded, 'dragging': isDragging }]"
+      draggable="true"
+      @dragstart="handleDragStart"
+      @dragend="handleDragEnd"
       @click="toggleExpand"
       :style="{ borderLeftColor: task.color }"
     >
@@ -313,9 +316,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete', 'move-up', 'move-down', 'update'])
+const emit = defineEmits(['delete', 'move-up', 'move-down', 'update', 'drag-start', 'drag-end'])
 
 const expanded = ref(props.task.isContainer || false)
+const isDragging = ref(false)
 
 function toggleExpand() {
   if (props.task.isContainer) {
@@ -350,6 +354,30 @@ function emitUpdate() {
 function updateChildren(branch, children) {
   emit('update', props.task.id, { [branch]: children })
 }
+
+function handleDragStart(event) {
+  isDragging.value = true
+  
+  // 设置拖拽数据，标记为画布中的任务
+  const dragData = {
+    isCanvasTask: true,
+    task: props.task,
+    taskId: props.task.id
+  }
+  
+  event.dataTransfer.setData('application/json', JSON.stringify(dragData))
+  event.dataTransfer.effectAllowed = 'move'
+  
+  // 设置拖拽图像
+  event.dataTransfer.setDragImage(event.currentTarget, 20, 20)
+  
+  emit('drag-start', props.task.id)
+}
+
+function handleDragEnd(event) {
+  isDragging.value = false
+  emit('drag-end')
+}
 </script>
 
 <style scoped>
@@ -380,13 +408,18 @@ function updateChildren(branch, children) {
   justify-content: space-between;
   align-items: center;
   padding: 14px 16px;
-  cursor: pointer;
+  cursor: move;
   border-left: 4px solid transparent;
   transition: all 0.3s;
 }
 
 .task-header:hover {
   background: #f5f7fa;
+}
+
+.task-header.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
 }
 
 .task-header.expanded {

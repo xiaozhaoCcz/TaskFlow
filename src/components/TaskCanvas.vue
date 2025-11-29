@@ -28,6 +28,8 @@
           @move-up="moveTaskUp"
           @move-down="moveTaskDown"
           @update="updateTask"
+          @drag-start="handleTaskDragStart"
+          @drag-end="handleTaskDragEnd"
         />
       </div>
     </div>
@@ -35,7 +37,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, inject, ref } from 'vue'
 import TaskBlock from './TaskBlock.vue'
 
 const props = defineProps({
@@ -54,6 +56,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update-tasks'])
+
+const draggingTaskId = inject('draggingTaskId', null)
+const moveTask = inject('moveTask', null)
 
 const taskCount = computed(() => {
   function countTasks(tasks) {
@@ -77,18 +82,28 @@ const taskCount = computed(() => {
 
 function handleDragOver(event) {
   event.preventDefault()
-  event.dataTransfer.dropEffect = 'copy'
+  
+  // 根据全局状态判断是否为画布任务
+  event.dataTransfer.dropEffect = draggingTaskId?.value ? 'move' : 'copy'
 }
 
 function handleDrop(event) {
   event.preventDefault()
   
   try {
-    const taskData = JSON.parse(event.dataTransfer.getData('application/json'))
-    const newTask = createTask(taskData)
+    const dragData = JSON.parse(event.dataTransfer.getData('application/json'))
     
-    const newTasks = [...props.tasks, newTask]
-    emit('update-tasks', newTasks)
+    if (dragData.isCanvasTask) {
+      // 从画布拖拽的任务 - 移动到顶层末尾
+      if (moveTask) {
+        moveTask(dragData.taskId, null, null)
+      }
+    } else {
+      // 从面板拖拽的新任务 - 创建任务
+      const newTask = createTask(dragData)
+      const newTasks = [...props.tasks, newTask]
+      emit('update-tasks', newTasks)
+    }
   } catch (error) {
     console.error('Failed to drop task:', error)
   }
@@ -217,6 +232,18 @@ function updateTask(taskId, updates) {
 
   const newTasks = update([...props.tasks])
   emit('update-tasks', newTasks)
+}
+
+function handleTaskDragStart(taskId) {
+  if (draggingTaskId) {
+    draggingTaskId.value = taskId
+  }
+}
+
+function handleTaskDragEnd() {
+  if (draggingTaskId) {
+    draggingTaskId.value = null
+  }
 }
 </script>
 
